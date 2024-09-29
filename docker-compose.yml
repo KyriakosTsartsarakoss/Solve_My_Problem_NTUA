@@ -1,0 +1,174 @@
+services:
+
+  # FRONTEND
+  service-user-frontend:
+    container_name: service-user-frontend
+    build: ./frontend
+    ports:
+      - 3000:3000
+    restart: 
+      always 
+
+  service-admin-panel:
+    container_name: service-admin-panel
+    build: ./admin-panel
+    ports:
+      - 3001:3000
+    restart: 
+      always 
+
+  # ADAPTER SERVICES 
+  service-user-data-adapter:
+    container_name: service-user-data-adapter
+    build: ./service-user-data-adapter
+    ports:
+      - 4010:4010
+    restart: 
+      always
+
+  service-submissions-adapter:
+    container_name: service-submissions-adapter
+    build: ./service-submissions-adapter
+    ports:
+      - 4011:4011
+    restart: 
+      always
+
+  service-submissions-logs-adapter:
+    container_name: service-submissions-logs-adapter
+    build: ./service-submissions-logs-adapter
+    ports:
+      - 4012:4012
+    restart: 
+      always
+
+
+  
+  # DATA STORE SERVICES
+  service-submissions:
+    container_name: service-submissions
+    build: ./service-submissions
+    restart: 
+      always
+
+  mongodb-submissions:
+    container_name: mongodb-submissions
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
+    restart:
+      always
+
+
+  service-user-submissions:
+    container_name: service-user-submissions
+    build: ./service-user-submissions
+    restart: 
+      always
+
+  mongodb-user-submissions:
+    container_name: mongodb-user-submissions
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
+    restart:
+      always
+
+
+
+  service-submissions-logs-data:
+    container_name: service-submissions-logs-data
+    build: ./service-submissions-logs-data
+    restart: 
+      always
+
+  mongodb-submissions-logs-data:
+    container_name: mongodb-submissions-logs-data
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
+    restart:
+      always
+
+
+
+  service-user-data:
+    container_name: service-user-data
+    build: ./service-user-data
+    restart: 
+      always
+      
+  mongodb-user-data:
+    container_name: mongodb-user-data
+    image: mongodb/mongodb-community-server:6.0-ubi8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: pass
+    restart:
+      always
+
+
+
+  # SOLVER SERVICES
+  service-solver:
+    build: ./service-solver
+    restart: 
+      always
+    deploy:
+      replicas: ${NUM_SOLVERS}
+    environment:
+      - MAX_EXEC_SECS=${MAX_EXEC_SECS}
+
+
+  # CHOREOGRAPHER SERVICES
+  zookeeper:
+    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.4.4
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+    restart:
+      always
+  
+  kafka:
+    container_name: kafka-broker
+    image: confluentinc/cp-kafka:7.4.4
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    restart:
+      always
+
+
+  init-kafka:
+    image: confluentinc/cp-kafka:7.4.4
+    depends_on:
+      - kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics --bootstrap-server kafka-broker:9092 --list
+
+      echo -e 'Creating kafka topics'
+
+      # PARITIONS = MAX SOLVERS!
+
+      kafka-topics --bootstrap-server kafka-broker:9092 --create --if-not-exists --topic solver-request --replication-factor 1 --partitions ${NUM_SOLVERS}
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka-broker:9092 --list
+      "
